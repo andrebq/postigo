@@ -1,0 +1,37 @@
+package server
+
+import (
+	"context"
+	"log/slog"
+	"net"
+	"net/http"
+	"time"
+)
+
+func Run(ctx context.Context, tcpBind string) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws/expose/{nodename}", handleExpose)
+	h := http.Server{
+		Addr:    tcpBind,
+		Handler: mux,
+		BaseContext: func(l net.Listener) context.Context {
+			return ctx
+		},
+	}
+	errCh := make(chan error, 1)
+	go func() {
+		slog.InfoContext(ctx, "Starting postigo server", "addr", h.Addr)
+		errCh <- h.ListenAndServe()
+	}()
+	select {
+	case <-ctx.Done():
+		slog.InfoContext(ctx, "Shutdown started")
+		sctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		h.Shutdown(sctx)
+		return ctx.Err()
+	case err := <-errCh:
+		slog.ErrorContext(ctx, "Unable to start server perform clear shutdown of server", "error", err)
+		return err
+	}
+}
