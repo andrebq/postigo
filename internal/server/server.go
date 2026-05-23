@@ -10,7 +10,15 @@ import (
 
 func Run(ctx context.Context, tcpBind string) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws/expose/{nodename}", handleExpose)
+	tm := newTrafficManager()
+	go func() {
+		err := tm.route(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "Error while routing connections", "error", err)
+		}
+	}()
+	mux.HandleFunc("/ws/expose/{nodename}", tm.handleExpose)
+	mux.HandleFunc("/ws/dial/{nodename}", tm.handleDial)
 	h := http.Server{
 		Addr:    tcpBind,
 		Handler: mux,

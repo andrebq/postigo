@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
-func (tm *trafficManager) handleExpose(w http.ResponseWriter, req *http.Request) {
+func (tm *trafficManager) handleDial(w http.ResponseWriter, req *http.Request) {
 	nodename := req.PathValue("nodename")
 	c, err := websocket.Accept(w, req, nil)
 	if err != nil {
@@ -28,26 +28,16 @@ func (tm *trafficManager) handleExpose(w http.ResponseWriter, req *http.Request)
 
 	session, err := yamux.Server(conn, ioutil.MuxerConfig())
 	if err != nil {
-		slog.ErrorContext(req.Context(), "Unable to setup yamux session", "error", err)
+		slog.DebugContext(req.Context(), "Unable to offer yamux session", "error", err)
 		return
 	}
 	defer session.Close()
-	regid, done := tm.registerNode(nodename, session)
-	defer tm.unregisterNode(regid)
-	select {
-	case <-done:
-		return
-	case <-ctx.Done():
-		return
-	}
-}
-
-func bindContext(parent context.Context, cancel func(error), reason error) {
-	select {
-	case <-parent.Done():
-		if reason == nil {
-			reason = parent.Err()
+	for {
+		stream, err := session.AcceptStreamWithContext(ctx)
+		if err != nil {
+			slog.DebugContext(req.Context(), "Unable to accept stream", "error", err)
+			return
 		}
-		cancel(reason)
+		go tm.dialNode(ctx, nodename, stream)
 	}
 }

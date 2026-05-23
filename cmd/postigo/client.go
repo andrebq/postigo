@@ -8,14 +8,14 @@ import (
 )
 
 func clientCmd() *cli.Command {
-	upstream := "ws://localhost:9000/ws/expose"
+	upstream := "ws://localhost:9000/ws"
 	nodename := ""
 	return &cli.Command{
 		Name: "client",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "hub",
-				Usage:       "Address of server where the websocket tunnel is running, should include the /ws/expose suffix when using default paths",
+				Usage:       "Address of server where the websocket tunnel is running, should include the /ws suffix when using default paths",
 				Destination: &upstream,
 				Value:       upstream,
 			},
@@ -29,6 +29,7 @@ func clientCmd() *cli.Command {
 		},
 		Subcommands: []*cli.Command{
 			exposeLocalCmd(&upstream, &nodename),
+			exposeRemoteCmd(&upstream, &nodename),
 		},
 	}
 }
@@ -55,6 +56,24 @@ func exposeLocalCmd(upstream *string, nodename *string) *cli.Command {
 		},
 		Action: func(ctx *cli.Context) error {
 			return client.ExposeLocalPort(ctx.Context, *upstream, *nodename, client.TCPDialer(localAddr, connTimeout))
+		},
+	}
+}
+
+func exposeRemoteCmd(upstream *string, nodename *string) *cli.Command {
+	var localAddr string
+	return &cli.Command{
+		Name: "expose-remote",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "tcp",
+				Usage:       "Local address which we should listen for connections",
+				Destination: &localAddr,
+				Required:    true,
+			},
+		},
+		Action: func(ctx *cli.Context) error {
+			return client.ListenAndServeTCP(ctx.Context, localAddr, *upstream, *nodename)
 		},
 	}
 }

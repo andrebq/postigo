@@ -22,7 +22,7 @@ func App(out, err io.Writer) *cli.App {
 		},
 		Before: func(ctx *cli.Context) error {
 			level := slog.LevelInfo
-			if *&debug {
+			if debug {
 				level = slog.LevelDebug
 			}
 			var handler slog.Handler
