@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/coder/websocket v1.8.14
+	github.com/hashicorp/yamux v0.1.2
 	github.com/mattn/go-isatty v0.0.22
 	github.com/urfave/cli/v2 v2.27.7
 )

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/andrebq/postigo/internal/client"
 	"github.com/urfave/cli/v2"
 )
@@ -32,10 +34,27 @@ func clientCmd() *cli.Command {
 }
 
 func exposeLocalCmd(upstream *string, nodename *string) *cli.Command {
+	var localAddr string
+	var connTimeout time.Duration
 	return &cli.Command{
 		Name: "expose-local",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "tcp",
+				Usage:       "Address being exposed, must be TCP but can be other nodes in the network",
+				Destination: &localAddr,
+				Required:    true,
+			},
+			&cli.DurationFlag{
+				Name:        "conn-timeout",
+				Usage:       "Max timeout when connecting to local host",
+				Destination: &connTimeout,
+				Value:       connTimeout,
+				Required:    true,
+			},
+		},
 		Action: func(ctx *cli.Context) error {
-			return client.ExposeLocalPort(ctx.Context, *upstream, *nodename)
+			return client.ExposeLocalPort(ctx.Context, *upstream, *nodename, client.TCPDialer(localAddr, connTimeout))
 		},
 	}
 }
