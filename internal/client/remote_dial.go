@@ -6,15 +6,17 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/andrebq/postigo/internal/auth"
 	"github.com/andrebq/postigo/internal/ioutil"
 	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
 )
 
-func ListenAndServeTCP(ctx context.Context, localAddr, upstream, nodename string) error {
+func ListenAndServeTCP(ctx context.Context, localAddr, upstream, nodename string, ks auth.KeySigner) error {
 	lst, err := net.Listen("tcp", localAddr)
 	if err != nil {
 		return fmt.Errorf("unable to setup local listener: %w", err)
@@ -32,7 +34,7 @@ func ListenAndServeTCP(ctx context.Context, localAddr, upstream, nodename string
 		}
 		// TODO: close conn before we exit from ListenAndServe?
 		go func() {
-			err := DialRemote(ctx, upstream, nodename, conn)
+			err := DialRemote(ctx, upstream, nodename, conn, ks)
 			if err != nil {
 				conn.Close()
 				slog.ErrorContext(ctx, "error dialing remote", "error", err)
@@ -41,14 +43,19 @@ func ListenAndServeTCP(ctx context.Context, localAddr, upstream, nodename string
 	}
 }
 
-func DialRemote(ctx context.Context, upstream string, nodename string, rwc io.ReadWriteCloser) error {
+func DialRemote(ctx context.Context, upstream string, nodename string, rwc io.ReadWriteCloser, ks auth.KeySigner) error {
+	defer rwc.Close()
 	upstream = strings.TrimRight(upstream, "/")
 	nodename = strings.TrimSpace(nodename)
 	if !validNodenameRE.MatchString(nodename) {
 		return fmt.Errorf("invalid nodename, should match: %v", validNodenameRE.String())
 	}
 	connurl := fmt.Sprintf("%v/dial/%v", upstream, nodename)
-	ws, err := wsDial(ctx, connurl)
+	tk, err := auth.DialNodeToken(ks, nodename, time.Minute)
+	if err != nil {
+		return fmt.Errorf("unable to sign token: %w", err)
+	}
+	ws, err := wsDial(ctx, connurl, tk)
 	if err != nil {
 		return err
 	}
@@ -68,10 +75,14 @@ func DialRemote(ctx context.Context, upstream string, nodename string, rwc io.Re
 	return handleStream(ctx, stream, rwc)
 }
 
-func wsDial(ctx context.Context, connurl string) (*websocket.Conn, error) {
+func wsDial(ctx context.Context, connurl string, token string) (*websocket.Conn, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	ws, res, err := websocket.Dial(ctx, connurl, &websocket.DialOptions{})
+	hdr := http.Header{}
+	hdr.Set("Authorization", fmt.Sprintf("Bearer %v", token))
+	ws, res, err := websocket.Dial(ctx, connurl, &websocket.DialOptions{
+		HTTPHeader: hdr,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to dial upstream server: %w", err)
 	}

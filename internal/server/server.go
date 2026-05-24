@@ -6,6 +6,9 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/andrebq/postigo/internal/auth"
+	"github.com/andrebq/postigo/internal/authz"
 )
 
 func Run(ctx context.Context, tcpBind string) error {
@@ -17,8 +20,8 @@ func Run(ctx context.Context, tcpBind string) error {
 			slog.ErrorContext(ctx, "Error while routing connections", "error", err)
 		}
 	}()
-	mux.HandleFunc("/ws/expose/{nodename}", tm.handleExpose)
-	mux.HandleFunc("/ws/dial/{nodename}", tm.handleDial)
+	mux.Handle("/ws/expose/{nodename}", authz.WrapFunc[auth.NodeClaims](tm.handleExpose, authz.AnyKey, authz.AcceptAll))
+	mux.Handle("/ws/dial/{nodename}", authz.WrapFunc[auth.NodeClaims](tm.handleDial, authz.AnyKey, authz.AcceptAll))
 	h := http.Server{
 		Addr:    tcpBind,
 		Handler: mux,

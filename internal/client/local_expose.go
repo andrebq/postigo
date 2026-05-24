@@ -6,10 +6,12 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/andrebq/postigo/internal/auth"
 	"github.com/andrebq/postigo/internal/ioutil"
 	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
@@ -37,6 +39,7 @@ func TCPDialer(address string, maxTimeout time.Duration) func(context.Context) (
 func ExposeLocalPort(ctx context.Context,
 	upstream string,
 	nodename string,
+	ks auth.KeySigner,
 	dial func(ctx context.Context) (io.ReadWriteCloser, error)) error {
 	upstream = strings.TrimRight(upstream, "/")
 	nodename = strings.TrimSpace(nodename)
@@ -44,7 +47,15 @@ func ExposeLocalPort(ctx context.Context,
 		return fmt.Errorf("invalid nodename, should match: %v", validNodenameRE.String())
 	}
 	connurl := fmt.Sprintf("%v/expose/%v", upstream, nodename)
-	ws, res, err := websocket.Dial(ctx, connurl, &websocket.DialOptions{})
+	header := http.Header{}
+	token, err := auth.ExposePortToken(ks, nodename, time.Minute)
+	if err != nil {
+		return fmt.Errorf("unable to create expose port token: %v", err)
+	}
+	header.Set("Authorization", fmt.Sprintf("Bearer %v", token))
+	ws, res, err := websocket.Dial(ctx, connurl, &websocket.DialOptions{
+		HTTPHeader: header,
+	})
 	if err != nil {
 		return fmt.Errorf("unable to dial upstream server: %w", err)
 	}
