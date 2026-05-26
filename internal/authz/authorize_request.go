@@ -77,6 +77,7 @@ func Wrap[C any](next http.Handler,
 			http.Error(w, "missing or invalid token", http.StatusUnauthorized)
 			return
 		}
+		slog.DebugContext(r.Context(), "Authenticated client", "claims", claims, "url", r.URL.Path)
 		r = r.WithContext(WithClaim(r.Context(), claims))
 		next.ServeHTTP(w, r)
 	})

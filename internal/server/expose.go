@@ -43,11 +43,8 @@ func (tm *trafficManager) handleExpose(w http.ResponseWriter, req *http.Request)
 }
 
 func bindContext(parent context.Context, cancel func(error), reason error) {
-	select {
-	case <-parent.Done():
-		if reason == nil {
-			reason = parent.Err()
-		}
-		cancel(reason)
+	<-parent.Done()
+	if reason == nil {
+		reason = parent.Err()
 	}
 }

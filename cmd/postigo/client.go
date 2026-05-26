@@ -56,7 +56,7 @@ func exposeLocalCmd(upstream *string,
 	nodename *string,
 	ks *auth.KeySigner) *cli.Command {
 	var localAddr string
-	var connTimeout time.Duration
+	connTimeout := time.Minute * 10
 	return &cli.Command{
 		Name: "expose-local",
 		Flags: []cli.Flag{
@@ -71,7 +71,7 @@ func exposeLocalCmd(upstream *string,
 				Usage:       "Max timeout when connecting to local host",
 				Destination: &connTimeout,
 				Value:       connTimeout,
-				Required:    true,
+				Required:    false,
 			},
 		},
 		Action: func(ctx *cli.Context) error {
