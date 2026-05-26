@@ -47,4 +47,5 @@ func bindContext(parent context.Context, cancel func(error), reason error) {
 	if reason == nil {
 		reason = parent.Err()
 	}
+	cancel(reason)
 }
