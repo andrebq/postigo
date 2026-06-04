@@ -46,7 +46,7 @@ func ExposeLocalPort(ctx context.Context,
 	if !validNodenameRE.MatchString(nodename) {
 		return fmt.Errorf("invalid nodename, should match: %v", validNodenameRE.String())
 	}
-	connurl := fmt.Sprintf("%v/expose/%v", upstream, nodename)
+	connurl := fmt.Sprintf("%v/ws/expose/%v", upstream, nodename)
 	header := http.Header{}
 	token, err := auth.ExposePortToken(ks, nodename, time.Minute)
 	if err != nil {

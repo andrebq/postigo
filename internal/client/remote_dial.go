@@ -50,7 +50,7 @@ func DialRemote(ctx context.Context, upstream string, nodename string, rwc io.Re
 	if !validNodenameRE.MatchString(nodename) {
 		return fmt.Errorf("invalid nodename, should match: %v", validNodenameRE.String())
 	}
-	connurl := fmt.Sprintf("%v/dial/%v", upstream, nodename)
+	connurl := fmt.Sprintf("%v/ws/dial/%v", upstream, nodename)
 	tk, err := auth.DialNodeToken(ks, nodename, time.Minute)
 	if err != nil {
 		return fmt.Errorf("unable to sign token: %w", err)
@@ -76,7 +76,7 @@ func DialRemote(ctx context.Context, upstream string, nodename string, rwc io.Re
 }
 
 func wsDial(ctx context.Context, connurl string, token string) (*websocket.Conn, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	hdr := http.Header{}
 	hdr.Set("Authorization", fmt.Sprintf("Bearer %v", token))

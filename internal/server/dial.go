@@ -15,7 +15,8 @@ func (tm *trafficManager) handleDial(w http.ResponseWriter, req *http.Request) {
 	nodename := req.PathValue("nodename")
 	c, err := websocket.Accept(w, req, nil)
 	if err != nil {
-		// ...
+		slog.ErrorContext(req.Context(), "unable to accept connection", "error", err, "remoteAddress", req.RemoteAddr, "url", req.URL.Path)
+		return
 	}
 	defer c.CloseNow()
 

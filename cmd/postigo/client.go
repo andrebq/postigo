@@ -11,7 +11,7 @@ import (
 )
 
 func clientCmd() *cli.Command {
-	upstream := "ws://localhost:9000/ws"
+	upstream := "ws://localhost:9000"
 	nodename := ""
 	var ks auth.KeySigner
 	return &cli.Command{
@@ -19,7 +19,7 @@ func clientCmd() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "hub",
-				Usage:       "Address of server where the websocket tunnel is running, should include the /ws suffix when using default paths",
+				Usage:       "Address of server where the websocket tunnel is running, should not include the /ws/ suffix when using default paths, but should include any prefix if using virtual hosts",
 				Destination: &upstream,
 				Value:       upstream,
 			},
