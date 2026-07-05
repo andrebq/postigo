@@ -9,29 +9,28 @@ type Collection struct {
 	Name  string
 }
 
-type KeyPath struct {
-	Colid  int64
-	Path   string
-	ValUid []byte
+type InternalDbSettingsInt struct {
+	Name  string
+	Value int64
 }
 
-type KeyValHistory struct {
-	Colid        int64
-	ValUid       []byte
-	ParentValUid []byte
+type Object struct {
+	Uid             interface{}
+	Colid           int64
+	Oid             string
+	Content         []byte
+	UpdatedAtUnixms int64
+	CreatedAtUnixms int64
+	DbEpoch         int64
 }
 
-type KeyValue struct {
-	Colid      int64
-	ValUid     []byte
-	Generation int64
-	Content    []byte
-}
-
-type Viewkeyvalue struct {
-	Colid      int64
-	Path       string
-	ValUid     []byte
-	Content    []byte
-	Generation int64
+type VwObject struct {
+	Uid             interface{}
+	Oid             string
+	Collection      string
+	Content         []byte
+	UpdatedAtUnixms int64
+	CreatedAtUnixms int64
+	DbEpoch         int64
+	Colid           int64
 }

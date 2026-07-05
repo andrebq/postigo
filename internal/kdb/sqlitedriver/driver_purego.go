@@ -1,6 +1,6 @@
 //go:build !use_sqlite_cgo
 
-package kdb
+package sqlitedriver
 
 import (
 	"database/sql"
@@ -8,6 +8,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func innerConn(fp string) (*sql.DB, error) {
+func Open(fp string) (*sql.DB, error) {
 	return sql.Open("sqlite", fp)
 }

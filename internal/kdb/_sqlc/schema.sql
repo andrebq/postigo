@@ -6,37 +6,31 @@ CREATE TABLE IF NOT EXISTS collections(
     UNIQUE(name)
 );
 
-CREATE TABLE IF NOT EXISTS key_val_history(
+CREATE TABLE IF NOT EXISTS objects(
+    uid BLOG PRIMARY KEY NOT NULL,
     colid INTEGER NOT NULL,
-    val_uid BLOB NOT NULL,
-    parent_val_uid BLOB,
-    PRIMARY KEY(colid, val_uid),
-    FOREIGN KEY(colid) REFERENCES collections(colid),
-    FOREIGN KEY(colid, parent_val_uid) REFERENCES key_val_history(colid, val_uid)
-);
-
-CREATE TABLE IF NOT EXISTS key_values(
-    colid INTEGER NOT NULL,
-    val_uid BLOB NOT NULL,
-    generation INTEGER NOT NULL,
+    oid TEXT NOT NULL,
     content BLOB NOT NULL,
-    PRIMARY KEY(colid, val_uid),
-    FOREIGN KEY(colid, val_uid) REFERENCES key_val_history(colid, val_uid)  -- fixed: key_history → key_val_history
+    updated_at_unixms INTEGER NOT NULL,
+    created_at_unixms INTEGER NOT NULL,
+    -- db_epoch is a internal field to help clients sync with
+    -- the database
+    db_epoch INTEGER NOT NULL,
+
+    FOREIGN KEY(colid) REFERENCES collections(colid),
+    UNIQUE (colid, oid)
 );
 
-CREATE TABLE IF NOT EXISTS key_paths(
-    colid INTEGER NOT NULL,
-    path TEXT NOT NULL,
-    val_uid BLOB NOT NULL,
-    PRIMARY KEY(colid, path),  -- fixed: path_hash → path (column doesn't exist)
-    FOREIGN KEY(colid, val_uid) REFERENCES key_val_history(colid, val_uid)
-);
+CREATE INDEX idx_obj_by_epoch ON objects(db_epoch);
 
-CREATE VIEW IF NOT EXISTS viewkeyvalue AS
-SELECT kp.colid  AS colid,
-       kp.path   AS path,
-       kp.val_uid AS val_uid,
-       kv.content AS content,
-       kv.generation AS generation
-FROM key_paths kp
-    INNER JOIN key_values kv ON kp.val_uid = kv.val_uid;
+CREATE VIEW IF NOT EXISTS vw_objects AS
+select o.uid, o.oid, c.name as collection, o.content, o.updated_at_unixms, o.created_at_unixms, o.db_epoch,
+    o.colid
+from objects o
+inner join collections c
+where o.colid = c.id;
+
+CREATE TABLE _internal_db_settings_int(
+    name text primary key not null,
+    value integer not null
+);

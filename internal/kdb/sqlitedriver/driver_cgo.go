@@ -1,6 +1,6 @@
 //go:build use_sqlite_cgo
 
-package kdb
+package sqlitedriver
 
 import (
 	"database/sql"
@@ -8,8 +8,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type ()
-
-func innerConn(fp string) (*sql.DB, error) {
+func Open(fp string) (*sql.DB, error) {
 	return sql.Open("sqlite3", "%v")
 }

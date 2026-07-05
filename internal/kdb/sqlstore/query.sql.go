@@ -9,84 +9,117 @@ import (
 	"context"
 )
 
-const getValue = `-- name: GetValue :one
-select colid, path, val_uid, content, generation
-from viewkeyvalue
-where path = ? and colid = ?
+const getCollectionIDByName = `-- name: GetCollectionIDByName :one
+select c.colid
+from collections c
+where name = ?
 limit 1
 `
 
-type GetValueParams struct {
-	Path  string
+func (q *Queries) GetCollectionIDByName(ctx context.Context, name string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getCollectionIDByName, name)
+	var colid int64
+	err := row.Scan(&colid)
+	return colid, err
+}
+
+const getIntSetting = `-- name: GetIntSetting :one
+select value from _internal_db_settings_int
+where name = ?
+limit 1
+`
+
+func (q *Queries) GetIntSetting(ctx context.Context, name string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getIntSetting, name)
+	var value int64
+	err := row.Scan(&value)
+	return value, err
+}
+
+const getObject = `-- name: GetObject :one
+select content
+from objects
+where oid = ? and colid = ?
+`
+
+type GetObjectParams struct {
+	Oid   string
 	Colid int64
 }
 
-func (q *Queries) GetValue(ctx context.Context, arg GetValueParams) (Viewkeyvalue, error) {
-	row := q.db.QueryRowContext(ctx, getValue, arg.Path, arg.Colid)
-	var i Viewkeyvalue
-	err := row.Scan(
-		&i.Colid,
-		&i.Path,
-		&i.ValUid,
-		&i.Content,
-		&i.Generation,
-	)
-	return i, err
+func (q *Queries) GetObject(ctx context.Context, arg GetObjectParams) ([]byte, error) {
+	row := q.db.QueryRowContext(ctx, getObject, arg.Oid, arg.Colid)
+	var content []byte
+	err := row.Scan(&content)
+	return content, err
 }
 
-const putKey = `-- name: PutKey :exec
-insert into key_paths (colid, path, val_uid)
-values (?, ?, ?)
-on conflict (colid, path)
-do update set val_uid = excluded.val_uid
+const getObjectByCollection = `-- name: GetObjectByCollection :one
+select content
+from vw_objects
+where oid = ? and collection = ?
 `
 
-type PutKeyParams struct {
-	Colid  int64
-	Path   string
-	ValUid []byte
+type GetObjectByCollectionParams struct {
+	Oid        string
+	Collection string
 }
 
-func (q *Queries) PutKey(ctx context.Context, arg PutKeyParams) error {
-	_, err := q.db.ExecContext(ctx, putKey, arg.Colid, arg.Path, arg.ValUid)
-	return err
+func (q *Queries) GetObjectByCollection(ctx context.Context, arg GetObjectByCollectionParams) ([]byte, error) {
+	row := q.db.QueryRowContext(ctx, getObjectByCollection, arg.Oid, arg.Collection)
+	var content []byte
+	err := row.Scan(&content)
+	return content, err
 }
 
-const putValue = `-- name: PutValue :exec
-insert into key_values (colid, val_uid, content, generation)
-values (?, ?, ?, ?)
+const putObject = `-- name: PutObject :exec
+insert into objects (uid, oid, colid, content, updated_at_unixms, created_at_unixms, db_epoch)
+values (?, ?, ?, ?, ?, ?, ?)
+on conflict (oid, colid) do
+update
+set content = excluded.content,
+    updated_at_unixms = excluded.updated_at_unixms,
+    db_epoch = excluded.db_epoch
 `
 
-type PutValueParams struct {
-	Colid      int64
-	ValUid     []byte
-	Content    []byte
-	Generation int64
+type PutObjectParams struct {
+	Uid             interface{}
+	Oid             string
+	Colid           int64
+	Content         []byte
+	UpdatedAtUnixms int64
+	CreatedAtUnixms int64
+	DbEpoch         int64
 }
 
-func (q *Queries) PutValue(ctx context.Context, arg PutValueParams) error {
-	_, err := q.db.ExecContext(ctx, putValue,
+func (q *Queries) PutObject(ctx context.Context, arg PutObjectParams) error {
+	_, err := q.db.ExecContext(ctx, putObject,
+		arg.Uid,
+		arg.Oid,
 		arg.Colid,
-		arg.ValUid,
 		arg.Content,
-		arg.Generation,
+		arg.UpdatedAtUnixms,
+		arg.CreatedAtUnixms,
+		arg.DbEpoch,
 	)
 	return err
 }
 
-const putValueHistory = `-- name: PutValueHistory :exec
-insert into key_val_history(colid, val_uid, parent_val_uid)
-values (?, ?, ?)
+const setIntSetting = `-- name: SetIntSetting :exec
+insert into _internal_db_settings_int(name, value)
+values (?, ?)
+on conflict (name) do
+update 
+set value = excluded.value
 `
 
-type PutValueHistoryParams struct {
-	Colid        int64
-	ValUid       []byte
-	ParentValUid []byte
+type SetIntSettingParams struct {
+	Name  string
+	Value int64
 }
 
-func (q *Queries) PutValueHistory(ctx context.Context, arg PutValueHistoryParams) error {
-	_, err := q.db.ExecContext(ctx, putValueHistory, arg.Colid, arg.ValUid, arg.ParentValUid)
+func (q *Queries) SetIntSetting(ctx context.Context, arg SetIntSettingParams) error {
+	_, err := q.db.ExecContext(ctx, setIntSetting, arg.Name, arg.Value)
 	return err
 }
 
