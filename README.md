@@ -2,7 +2,7 @@
 
 Simple tunnel solutions for homelab use
 
-## Why postgio
+## Why postigo
 
 A *postigo* is a small secondary door built into a larger gate or fortified wall — the Portuguese equivalent of a postern. Historically, it was the discreet passage used by those who knew it was there: a way in and out that didn't require opening the main gate.
 
