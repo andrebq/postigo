@@ -3,22 +3,35 @@ select c.colid
 from collections c
 where name = ?
 limit 1;
--- name: GetObject :one
-select content
+-- name: GetObjectSeq :one
+select content, seq, updated_at_unixms, created_at_unixms
 from objects
 where oid = ? and colid = ?;
--- name: GetObjectByCollection :one
-select content
-from vw_objects
-where oid = ? and collection = ?;
--- name: PutObject :exec
-insert into objects (uid, oid, colid, content, updated_at_unixms, created_at_unixms, db_epoch)
-values (?, ?, ?, ?, ?, ?, ?)
+-- name: PutObjectSeq :one
+insert into objects (uid, oid, colid, content, updated_at_unixms, created_at_unixms, db_epoch, seq)
+values (?, ?, ?, ?, ?, ?, ?, 1)
 on conflict (oid, colid) do
 update
 set content = excluded.content,
     updated_at_unixms = excluded.updated_at_unixms,
-    db_epoch = excluded.db_epoch;
+    db_epoch = excluded.db_epoch,
+    seq = seq + 1
+returning seq;
+
+-- name: PutNew :exec
+insert into objects (uid, oid, colid, content, updated_at_unixms, created_at_unixms, db_epoch, seq)
+values (?, ?, ?, ?, ?, ?, ?, 1);
+
+-- name: UpdateObject :execrows
+update objects
+set content = ?,
+    updated_at_unixms = ?,
+    db_epoch = ?,
+    seq = seq + 1
+where
+    oid = ?
+    and colid = ?
+    and seq = ?;
 -- name: UpsertCollection :one
 insert into collections(name)
 values (?) on conflict (name) do

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"time"
 
 	_ "embed"
@@ -42,7 +43,13 @@ type (
 var (
 	rootUID        = uuid.MustParse("6a8fcbd8-32fd-425a-a0f1-38de4460cb1a")
 	collectionsUID = uuid.NewSHA1(rootUID, []byte("collections"))
+
+	errConcurrentUpdate = errors.New("concurrent update during CAS operation")
 )
+
+func IsConcurrentUpdate(err error) bool {
+	return errors.Is(err, errConcurrentUpdate)
+}
 
 func Open(fp string) (*DB, error) {
 	db := &DB{}
@@ -116,19 +123,91 @@ func (c *Collection[T]) computeUid(oid string) []byte {
 }
 
 func (c *Collection[T]) Lookup(ctx context.Context, out *T, id string) error {
-	var raw []byte
+	_, err := c.lookup(ctx, out, id)
+	return err
+}
+
+func (c *Collection[T]) lookup(ctx context.Context, out *T, id string) (int64, error) {
+	var raw sqlstore.GetObjectSeqRow
 	err := readTransaction(ctx, c.db, func(q *sqlstore.Queries) error {
 		var err error
-		raw, err = q.GetObject(ctx, sqlstore.GetObjectParams{
+		raw, err = q.GetObjectSeq(ctx, sqlstore.GetObjectSeqParams{
 			Colid: c.colid,
 			Oid:   id,
 		})
 		return err
 	})
 	if err != nil {
+		return -1, err
+	}
+	return raw.Seq, json.Unmarshal(raw.Content, out)
+}
+
+func (c *Collection[T]) CAS(ctx context.Context, id string, updateFn func(*T) (*T, error)) (bool, error) {
+	var old T
+	seq, err := c.lookup(ctx, &old, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	} else if err != nil {
+		return false, err
+	}
+	updated, err := updateFn(&old)
+	if err != nil {
+		return false, err
+	}
+	if seq == -1 {
+		err = c.putNew(ctx, updated)
+		return err == nil, err
+	} else {
+		err = c.updateSeq(ctx, seq, updated)
+		return err == nil, err
+	}
+}
+
+func (c *Collection[T]) updateSeq(ctx context.Context, seq int64, content *T) error {
+	id := (*content).GetID()
+	buf, err := json.Marshal(content)
+	if err != nil {
 		return err
 	}
-	return json.Unmarshal(raw, out)
+	err = transactional(ctx, c.db, func(q *sqlstore.Queries) error {
+		now := dbnow()
+		affectedRows, err := q.UpdateObject(ctx, sqlstore.UpdateObjectParams{
+			Colid:           c.colid,
+			Oid:             id,
+			Content:         buf,
+			UpdatedAtUnixms: now,
+			DbEpoch:         c.db.settings.epoch,
+			Seq:             seq,
+		})
+		if err == nil && affectedRows == 0 {
+			err = errConcurrentUpdate
+		}
+		return err
+	})
+	return err
+}
+
+func (c *Collection[T]) putNew(ctx context.Context, content *T) error {
+	id := (*content).GetID()
+	buf, err := json.Marshal(content)
+	if err != nil {
+		return err
+	}
+	uid := c.computeUid(id)
+	return transactional(ctx, c.db, func(q *sqlstore.Queries) error {
+		now := dbnow()
+		err = q.PutNew(ctx, sqlstore.PutNewParams{
+			Colid:           c.colid,
+			Uid:             uid,
+			Oid:             id,
+			Content:         buf,
+			UpdatedAtUnixms: now,
+			CreatedAtUnixms: now,
+			DbEpoch:         c.db.settings.epoch,
+		})
+		return err
+	})
 }
 
 func (c *Collection[T]) Put(ctx context.Context, content *T) error {
@@ -139,7 +218,7 @@ func (c *Collection[T]) Put(ctx context.Context, content *T) error {
 	}
 	return transactional(ctx, c.db, func(q *sqlstore.Queries) error {
 		now := dbnow()
-		return q.PutObject(ctx, sqlstore.PutObjectParams{
+		_, err = q.PutObjectSeq(ctx, sqlstore.PutObjectSeqParams{
 			Uid:             c.computeUid(id),
 			Colid:           c.colid,
 			Content:         buf,
@@ -148,6 +227,7 @@ func (c *Collection[T]) Put(ctx context.Context, content *T) error {
 			UpdatedAtUnixms: now,
 			DbEpoch:         c.db.settings.epoch,
 		})
+		return err
 	})
 }
 
@@ -172,7 +252,8 @@ func transactional(ctx context.Context, db *DB, fn func(q *sqlstore.Queries) err
 	defer rollback()
 	err = fn(q)
 	if err != nil {
-		return rollback()
+		rollback()
+		return err
 	}
 	return commit()
 }
@@ -201,6 +282,9 @@ func getTx(ctx context.Context, db *DB) (
 		}, func() error {
 			if tx != nil {
 				err := tx.Rollback()
+				if err != nil {
+					slog.DebugContext(ctx, "Rollback error", "error", err)
+				}
 				tx = nil
 				return err
 			}

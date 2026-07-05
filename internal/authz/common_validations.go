@@ -42,6 +42,7 @@ func KeyFromDB[C WithKID](keyset *kdb.Collection[AuthorizedKey]) func(c C) (any,
 	return func(c C) (any, error) {
 		kid, err := c.KID()
 		if err != nil {
+			println("here?")
 			return nil, err
 		}
 		var ak AuthorizedKey

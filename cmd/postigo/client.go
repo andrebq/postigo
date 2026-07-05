@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -14,9 +15,11 @@ func clientCmd() *cli.Command {
 	upstream := "ws://localhost:9000"
 	nodename := ""
 	var ks auth.KeySigner
+	dataFlag, opendb := dataDirFlag()
 	return &cli.Command{
 		Name: "client",
 		Flags: []cli.Flag{
+			dataFlag,
 			&cli.StringFlag{
 				Name:        "hub",
 				Usage:       "Address of server where the websocket tunnel is running, should not include the /ws/ suffix when using default paths, but should include any prefix if using virtual hosts",
@@ -33,16 +36,26 @@ func clientCmd() *cli.Command {
 		},
 		Before: func(ctx *cli.Context) error {
 			var err error
+			_, secretDB, err := opendb()
+			if err != nil {
+				return err
+			}
 			ks, err = auth.LoadNodeKey(os.Getenv, os.Setenv)
 			if err != nil && auth.IsKeyNotSet(err) {
-				var rndErr error
-				ks, rndErr = auth.RandomNodeKey()
-				if rndErr != nil {
-					return fmt.Errorf("missing env key %v and random key could not be generated %w", err, rndErr)
+				// try to load from database
+				var err2 error
+				ks, err2 = auth.LoadNodeKeyFromDB(ctx.Context, secretDB, true)
+				if err2 != nil {
+					slog.Info("Unable to load key from secrets database", "err", err)
+					ks, err2 = auth.RandomNodeKey()
+					if err2 != nil {
+						return fmt.Errorf("missing env key %v and random key could not be generated %w", err, err2)
+					}
 				}
 			} else if err != nil {
 				return err
 			}
+			slog.Info("Node public key", "kid", ks.KID())
 			return nil
 		},
 		Subcommands: []*cli.Command{
@@ -84,9 +97,16 @@ func exposeRemoteCmd(upstream *string,
 	nodename *string,
 	ks *auth.KeySigner) *cli.Command {
 	var localAddr string
+	var remoteNode string
 	return &cli.Command{
 		Name: "expose-remote",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "remote-node",
+				Usage:       "Remote nodename that will be dialed when local connections are made",
+				Destination: &remoteNode,
+				Required:    true,
+			},
 			&cli.StringFlag{
 				Name:        "tcp",
 				Usage:       "Local address which we should listen for connections",
@@ -95,7 +115,7 @@ func exposeRemoteCmd(upstream *string,
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			return client.ListenAndServeTCP(ctx.Context, localAddr, *upstream, *nodename, *ks)
+			return client.ListenAndServeTCP(ctx.Context, localAddr, *upstream, remoteNode, *ks)
 		},
 	}
 }

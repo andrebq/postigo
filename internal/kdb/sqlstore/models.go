@@ -19,6 +19,7 @@ type Object struct {
 	Colid           int64
 	Oid             string
 	Content         []byte
+	Seq             int64
 	UpdatedAtUnixms int64
 	CreatedAtUnixms int64
 	DbEpoch         int64

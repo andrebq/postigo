@@ -43,6 +43,7 @@ func App(out, err io.Writer) *cli.App {
 		Commands: []*cli.Command{
 			serverCmd(),
 			clientCmd(),
+			ctlCmd(),
 		},
 		Writer:    out,
 		ErrWriter: err,

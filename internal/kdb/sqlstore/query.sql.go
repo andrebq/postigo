@@ -36,53 +36,42 @@ func (q *Queries) GetIntSetting(ctx context.Context, name string) (int64, error)
 	return value, err
 }
 
-const getObject = `-- name: GetObject :one
-select content
+const getObjectSeq = `-- name: GetObjectSeq :one
+select content, seq, updated_at_unixms, created_at_unixms
 from objects
 where oid = ? and colid = ?
 `
 
-type GetObjectParams struct {
+type GetObjectSeqParams struct {
 	Oid   string
 	Colid int64
 }
 
-func (q *Queries) GetObject(ctx context.Context, arg GetObjectParams) ([]byte, error) {
-	row := q.db.QueryRowContext(ctx, getObject, arg.Oid, arg.Colid)
-	var content []byte
-	err := row.Scan(&content)
-	return content, err
+type GetObjectSeqRow struct {
+	Content         []byte
+	Seq             int64
+	UpdatedAtUnixms int64
+	CreatedAtUnixms int64
 }
 
-const getObjectByCollection = `-- name: GetObjectByCollection :one
-select content
-from vw_objects
-where oid = ? and collection = ?
+func (q *Queries) GetObjectSeq(ctx context.Context, arg GetObjectSeqParams) (GetObjectSeqRow, error) {
+	row := q.db.QueryRowContext(ctx, getObjectSeq, arg.Oid, arg.Colid)
+	var i GetObjectSeqRow
+	err := row.Scan(
+		&i.Content,
+		&i.Seq,
+		&i.UpdatedAtUnixms,
+		&i.CreatedAtUnixms,
+	)
+	return i, err
+}
+
+const putNew = `-- name: PutNew :exec
+insert into objects (uid, oid, colid, content, updated_at_unixms, created_at_unixms, db_epoch, seq)
+values (?, ?, ?, ?, ?, ?, ?, 1)
 `
 
-type GetObjectByCollectionParams struct {
-	Oid        string
-	Collection string
-}
-
-func (q *Queries) GetObjectByCollection(ctx context.Context, arg GetObjectByCollectionParams) ([]byte, error) {
-	row := q.db.QueryRowContext(ctx, getObjectByCollection, arg.Oid, arg.Collection)
-	var content []byte
-	err := row.Scan(&content)
-	return content, err
-}
-
-const putObject = `-- name: PutObject :exec
-insert into objects (uid, oid, colid, content, updated_at_unixms, created_at_unixms, db_epoch)
-values (?, ?, ?, ?, ?, ?, ?)
-on conflict (oid, colid) do
-update
-set content = excluded.content,
-    updated_at_unixms = excluded.updated_at_unixms,
-    db_epoch = excluded.db_epoch
-`
-
-type PutObjectParams struct {
+type PutNewParams struct {
 	Uid             interface{}
 	Oid             string
 	Colid           int64
@@ -92,8 +81,8 @@ type PutObjectParams struct {
 	DbEpoch         int64
 }
 
-func (q *Queries) PutObject(ctx context.Context, arg PutObjectParams) error {
-	_, err := q.db.ExecContext(ctx, putObject,
+func (q *Queries) PutNew(ctx context.Context, arg PutNewParams) error {
+	_, err := q.db.ExecContext(ctx, putNew,
 		arg.Uid,
 		arg.Oid,
 		arg.Colid,
@@ -103,6 +92,43 @@ func (q *Queries) PutObject(ctx context.Context, arg PutObjectParams) error {
 		arg.DbEpoch,
 	)
 	return err
+}
+
+const putObjectSeq = `-- name: PutObjectSeq :one
+insert into objects (uid, oid, colid, content, updated_at_unixms, created_at_unixms, db_epoch, seq)
+values (?, ?, ?, ?, ?, ?, ?, 1)
+on conflict (oid, colid) do
+update
+set content = excluded.content,
+    updated_at_unixms = excluded.updated_at_unixms,
+    db_epoch = excluded.db_epoch,
+    seq = seq + 1
+returning seq
+`
+
+type PutObjectSeqParams struct {
+	Uid             interface{}
+	Oid             string
+	Colid           int64
+	Content         []byte
+	UpdatedAtUnixms int64
+	CreatedAtUnixms int64
+	DbEpoch         int64
+}
+
+func (q *Queries) PutObjectSeq(ctx context.Context, arg PutObjectSeqParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, putObjectSeq,
+		arg.Uid,
+		arg.Oid,
+		arg.Colid,
+		arg.Content,
+		arg.UpdatedAtUnixms,
+		arg.CreatedAtUnixms,
+		arg.DbEpoch,
+	)
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
 }
 
 const setIntSetting = `-- name: SetIntSetting :exec
@@ -121,6 +147,42 @@ type SetIntSettingParams struct {
 func (q *Queries) SetIntSetting(ctx context.Context, arg SetIntSettingParams) error {
 	_, err := q.db.ExecContext(ctx, setIntSetting, arg.Name, arg.Value)
 	return err
+}
+
+const updateObject = `-- name: UpdateObject :execrows
+update objects
+set content = ?,
+    updated_at_unixms = ?,
+    db_epoch = ?,
+    seq = seq + 1
+where
+    oid = ?
+    and colid = ?
+    and seq = ?
+`
+
+type UpdateObjectParams struct {
+	Content         []byte
+	UpdatedAtUnixms int64
+	DbEpoch         int64
+	Oid             string
+	Colid           int64
+	Seq             int64
+}
+
+func (q *Queries) UpdateObject(ctx context.Context, arg UpdateObjectParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateObject,
+		arg.Content,
+		arg.UpdatedAtUnixms,
+		arg.DbEpoch,
+		arg.Oid,
+		arg.Colid,
+		arg.Seq,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const upsertCollection = `-- name: UpsertCollection :one

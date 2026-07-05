@@ -61,6 +61,7 @@ func ExposePortToken(ks KeySigner, nodename string, ttl time.Duration) (string, 
 	nc.KeyID = ks.KID()
 	nc.ExpiresAt = jwt.NewNumericDate(time.Now().Add(ttl))
 	nc.NotBefore = jwt.NewNumericDate(time.Now())
+	nc.Nodename = nodename
 	// each node is issued by a given kid
 	// since what identifies a node is its key
 	nc.Issuer = ks.KID()

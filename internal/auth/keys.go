@@ -1,13 +1,16 @@
 package auth
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 
+	"github.com/andrebq/postigo/internal/kdb"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -36,6 +39,40 @@ func (e *ed25519Key) KID() string {
 
 func (e *ed25519Key) Sign(token *jwt.Token) (string, error) {
 	return token.SignedString(e.pk)
+}
+
+type secretKey struct {
+	ID   string `json:"id"`
+	Seed []byte `json:"seed"`
+}
+
+func (s secretKey) GetID() string { return s.ID }
+
+func LoadNodeKeyFromDB(ctx context.Context, secretsDB *kdb.DB, createNewIfNeeded bool) (KeySigner, error) {
+	col, err := kdb.GetCollection[secretKey](ctx, secretsDB, "secrets")
+	if err != nil {
+		return nil, err
+	}
+	var nodeSeed secretKey
+	err = col.Lookup(ctx, &nodeSeed, "node-seed")
+	if errors.Is(err, sql.ErrNoRows) && createNewIfNeeded {
+		var randseed [32]byte
+		_, err := rand.Read(randseed[:])
+		if err != nil {
+			return nil, err
+		}
+		err = col.Put(ctx, &secretKey{
+			Seed: randseed[:],
+			ID:   "node-seed",
+		})
+		if err != nil {
+			return nil, err
+		}
+		return NodeKeyFromSeed(randseed[:])
+	} else if err != nil {
+		return nil, err
+	}
+	return NodeKeyFromSeed(nodeSeed.Seed)
 }
 
 // Load node key from the given environment by looking up

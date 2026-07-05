@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS objects(
     colid INTEGER NOT NULL,
     oid TEXT NOT NULL,
     content BLOB NOT NULL,
+    seq INTEGER NOT NULL,
     updated_at_unixms INTEGER NOT NULL,
     created_at_unixms INTEGER NOT NULL,
     -- db_epoch is a internal field to help clients sync with
@@ -21,16 +22,16 @@ CREATE TABLE IF NOT EXISTS objects(
     UNIQUE (colid, oid)
 );
 
-CREATE INDEX idx_obj_by_epoch ON objects(db_epoch);
+CREATE INDEX IF NOT EXISTS idx_obj_by_epoch ON objects(db_epoch);
 
 CREATE VIEW IF NOT EXISTS vw_objects AS
 select o.uid, o.oid, c.name as collection, o.content, o.updated_at_unixms, o.created_at_unixms, o.db_epoch,
     o.colid
 from objects o
 inner join collections c
-where o.colid = c.id;
+where o.colid = c.oid;
 
-CREATE TABLE _internal_db_settings_int(
+CREATE TABLE IF NOT EXISTS _internal_db_settings_int(
     name text primary key not null,
     value integer not null
 );
