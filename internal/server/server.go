@@ -9,9 +9,18 @@ import (
 
 	"github.com/andrebq/postigo/internal/auth"
 	"github.com/andrebq/postigo/internal/authz"
+	"github.com/andrebq/postigo/internal/kdb"
 )
 
-func Run(ctx context.Context, tcpBind string) error {
+func Run(ctx context.Context,
+	db *kdb.DB,
+	tcpBind string) error {
+
+	keyCol, err := kdb.GetCollection[authz.AuthorizedKey](ctx, db, "node_keyset")
+	if err != nil {
+		return nil
+	}
+
 	mux := http.NewServeMux()
 	tm := newTrafficManager()
 	go func() {
@@ -20,8 +29,8 @@ func Run(ctx context.Context, tcpBind string) error {
 			slog.ErrorContext(ctx, "Error while routing connections", "error", err)
 		}
 	}()
-	mux.Handle("/ws/expose/{nodename}", authz.WrapFunc[auth.NodeClaims](tm.handleExpose, authz.AnyKey, authz.AcceptAll))
-	mux.Handle("/ws/dial/{nodename}", authz.WrapFunc[auth.NodeClaims](tm.handleDial, authz.AnyKey, authz.AcceptAll))
+	mux.Handle("/ws/expose/{nodename}", authz.WrapFunc[auth.NodeClaims](tm.handleExpose, authz.KeyFromDB[auth.NodeClaims](keyCol), authz.AcceptAll))
+	mux.Handle("/ws/dial/{nodename}", authz.WrapFunc[auth.NodeClaims](tm.handleDial, authz.KeyFromDB[auth.NodeClaims](keyCol), authz.AcceptAll))
 	h := http.Server{
 		Addr:    tcpBind,
 		Handler: mux,

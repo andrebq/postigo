@@ -36,6 +36,12 @@ func TCPDialer(address string, maxTimeout time.Duration) func(context.Context) (
 	}
 }
 
+// ExposeLocalPort at the remote upstream under the given nodename,
+// the key signer must be authorized to sign expose requests for the given nodename.
+//
+// dial function will be called whenever a new connection to nodename is received
+// in upstream. It can open a local tcp connection, a unix socket, or anything that implements
+// ReadWriteCloser
 func ExposeLocalPort(ctx context.Context,
 	upstream string,
 	nodename string,

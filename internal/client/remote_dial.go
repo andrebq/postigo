@@ -16,6 +16,10 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
+// ListenAndServeTCP connections in the localAddr, every new connection will dial
+// nodename at the upstream server.
+//
+// The KeySigner must use a key that can sign dial tokens to nodename
 func ListenAndServeTCP(ctx context.Context, localAddr, upstream, nodename string, ks auth.KeySigner) error {
 	lst, err := net.Listen("tcp", localAddr)
 	if err != nil {
